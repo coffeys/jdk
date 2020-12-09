@@ -26,11 +26,9 @@
 package sun.security.pkcs11;
 
 import java.util.*;
-
 import java.security.ProviderException;
 
 import sun.security.util.Debug;
-
 import sun.security.pkcs11.wrapper.*;
 import static sun.security.pkcs11.wrapper.PKCS11Constants.*;
 
@@ -127,6 +125,7 @@ final class SessionManager {
 
     Session getObjSession() throws PKCS11Exception {
         Session session = objSessions.poll();
+        try {
         if (session != null) {
             return ensureValid(session);
         }
@@ -136,10 +135,14 @@ final class SessionManager {
         }
         session = openSession();
         return ensureValid(session);
+        } finally {
+            System.out.println("SM.getObjSession: " + session.id());
+        }
     }
 
     Session getOpSession() throws PKCS11Exception {
         Session session = opSessions.poll();
+        try {
         if (session != null) {
             return ensureValid(session);
         }
@@ -155,6 +158,9 @@ final class SessionManager {
             return ensureValid(session);
         }
         throw new ProviderException("Could not obtain session");
+        } finally {
+            System.out.println("SM.getOpSession: " + session.id());
+        }
     }
 
     private Session ensureValid(Session session) {
@@ -171,7 +177,10 @@ final class SessionManager {
             System.out.println("Killing session (" + location + ") active: "
                 + activeSessions.get());
         }
-        closeSession(session);
+        System.out.println("SM.killSession: " + session.id());
+
+        session.kill();
+        activeSessions.decrementAndGet();
         return null;
     }
 
@@ -179,13 +188,19 @@ final class SessionManager {
         if ((session == null) || (token.isValid() == false)) {
             return null;
         }
-
         if (session.hasObjects()) {
+            System.out.println("SM.releaseSession: objPool, " + session.id());
             objSessions.release(session);
         } else {
+            System.out.println("SM.releaseSession: opPool, " + session.id());
             opSessions.release(session);
         }
         return null;
+    }
+
+    void clearPools() {
+        objSessions.closeAll();
+        opSessions.closeAll();
     }
 
     void demoteObjSession(Session session) {
@@ -196,10 +211,14 @@ final class SessionManager {
             System.out.println("Demoting session, active: " +
                 activeSessions.get());
         }
+        System.out.println("SM.demoteSession: objPool->opPool, " +
+                session.id());
+
         boolean present = objSessions.remove(session);
         if (present == false) {
             // session is currently in use
             // will be added to correct pool on release, nothing to do now
+            System.out.println("...in use");
             return;
         }
         opSessions.release(session);
@@ -237,7 +256,9 @@ final class SessionManager {
 
         private final SessionManager mgr;
         private final AbstractQueue<Session> pool;
+        // access is synchronized on 'this'
         private final int SESSION_MAX = 5;
+        private volatile boolean closed = false;
 
         // Object session pools can contain unlimited sessions.
         // Operation session pools are limited and enforced by the queue.
@@ -260,7 +281,7 @@ final class SessionManager {
 
         void release(Session session) {
             // Object session pools never return false, only Operation ones
-            if (!pool.offer(session)) {
+            if (closed || !pool.offer(session)) {
                 mgr.closeSession(session);
                 free();
             }
@@ -268,6 +289,11 @@ final class SessionManager {
 
         // Free any old operation session if this queue is full
         void free() {
+            System.out.println("Pool free() called w/ size = " + pool.size());
+
+            // quick return path
+            if (pool.size() == 0) return;
+
             int n = SESSION_MAX;
             int i = 0;
             Session oldestSession;
@@ -291,6 +317,22 @@ final class SessionManager {
             }
         }
 
+        // empties out all sessions inside 'pool' and close them.
+        // however the Pool can still accept sessions
+        void closeAll() {
+            closed = true;
+            Session s;
+            boolean isObj = false;
+            int count = 0;
+            while ((s = pool.poll()) != null) {
+                count++;
+                if (s.hasObjects()) {
+                    isObj = true;
+                }
+                mgr.killSession(s);
+            }
+            System.out.println("Closed " + count + " session(s) in " +
+                    (isObj? " obj":" op") + "SessionPool");
+        }
     }
-
 }

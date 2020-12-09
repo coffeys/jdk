@@ -38,9 +38,7 @@ import javax.security.auth.login.LoginException;
 import javax.security.auth.login.FailedLoginException;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
-import javax.security.auth.callback.ConfirmationCallback;
 import javax.security.auth.callback.PasswordCallback;
-import javax.security.auth.callback.TextOutputCallback;
 
 import sun.security.util.Debug;
 import sun.security.util.ResourcesMgr;
@@ -83,7 +81,11 @@ public final class SunPKCS11 extends AuthProvider {
 
     private volatile Token token;
 
+    private volatile boolean isShuttingDown = false;
+
     private TokenPoller poller;
+
+    private NativeResourceCleaner cleaner;
 
     Token getToken() {
         return token;
@@ -891,13 +893,19 @@ public final class SunPKCS11 extends AuthProvider {
     // background thread that periodically checks for token insertion
     // if no token is present. We need to do that in a separate thread because
     // the insertion check may block for quite a long time on some tokens.
-    private static class TokenPoller implements Runnable {
+    private static class TokenPoller extends Thread {
         private final SunPKCS11 provider;
         private volatile boolean enabled;
+
         private TokenPoller(SunPKCS11 provider) {
+            super((ThreadGroup)null, "Poller-" + provider.getName());
+            //setContextClassLoader(null);
+            setDaemon(true);
+            setPriority(Thread.MIN_PRIORITY);
             this.provider = provider;
             enabled = true;
         }
+        @Override
         public void run() {
             int interval = provider.config.getInsertionCheckInterval();
             while (enabled) {
@@ -926,13 +934,8 @@ public final class SunPKCS11 extends AuthProvider {
         if (poller != null) {
             return;
         }
-        final TokenPoller poller = new TokenPoller(this);
-        Thread t = new Thread(null, poller, "Poller " + getName(), 0, false);
-        t.setContextClassLoader(null);
-        t.setDaemon(true);
-        t.setPriority(Thread.MIN_PRIORITY);
-        t.start();
-        this.poller = poller;
+        poller = new TokenPoller(this);
+        poller.start();
     }
 
     // destroy the poller thread, if active
@@ -955,6 +958,36 @@ public final class SunPKCS11 extends AuthProvider {
         return (token != null) && token.isValid();
     }
 
+    private static class NativeResourceCleaner extends Thread {
+
+        private int iterationCount;
+
+        private NativeResourceCleaner(String name) {
+            super((ThreadGroup)null, "Cleanup-" + name);
+            //setContextClassLoader(null);
+            setDaemon(true);
+            setPriority(Thread.MIN_PRIORITY);
+            iterationCount = Integer.MAX_VALUE;
+        }
+
+        @Override
+        public void run() {
+            while (iterationCount-- > 0) {
+                try {
+                    sleep(2_000); // 2K millisec
+                } catch (InterruptedException ie) {
+                    break;
+                }
+                P11Key.drainRefQueue();
+                Session.drainRefQueue();
+            }
+        }
+
+        void disable() {
+            iterationCount = 10;
+        }
+    }
+
     // destroy the token. Called if we detect that it has been removed
     synchronized void uninitToken(Token token) {
         if (this.token != token) {
@@ -970,7 +1003,8 @@ public final class SunPKCS11 extends AuthProvider {
                 return null;
             }
         });
-        createPoller();
+        // keep polling for token insertion if not shutting down
+        if (!isShuttingDown) createPoller();
     }
 
     private static boolean isLegacy(CK_MECHANISM_INFO mechInfo)
@@ -1117,6 +1151,8 @@ public final class SunPKCS11 extends AuthProvider {
         });
 
         this.token = token;
+        this.cleaner = new NativeResourceCleaner(getName());
+        this.cleaner.start();
     }
 
     private static final class P11Service extends Service {
@@ -1481,7 +1517,6 @@ public final class SunPKCS11 extends AuthProvider {
         }
 
         // perform token logout
-
         Session session = null;
         try {
             session = token.getOpSession();
@@ -1503,6 +1538,23 @@ public final class SunPKCS11 extends AuthProvider {
         } finally {
             token.releaseSession(session);
         }
+    }
+
+    @Override
+    public void terminate() {
+        isShuttingDown = true;
+/*
+        try {
+            // XXX requires logout permission AuthProvider.name?
+            logout();
+        } catch (LoginException le) {
+            // best effort
+            System.out.println("Ignoring Exception during LogOut");
+            le.printStackTrace();
+        }
+*/
+        token.destroy();
+        System.out.println("At end of terminate(), This.token = " + this.token);
     }
 
     /**

@@ -299,6 +299,14 @@ public abstract class Provider extends Properties {
     }
 
     /**
+     * Terminate this provider.
+     *
+     * @since 16
+     */
+    public void terminate() {
+    }
+
+    /**
      * Check if this provider instance has been configured.
      *
      * @implSpec
