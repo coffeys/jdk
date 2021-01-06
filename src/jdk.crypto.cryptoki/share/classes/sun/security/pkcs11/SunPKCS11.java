@@ -81,11 +81,11 @@ public final class SunPKCS11 extends AuthProvider {
 
     private volatile Token token;
 
-    private volatile boolean isShuttingDown = false;
+    volatile boolean isShuttingDown = false;
 
     private TokenPoller poller;
 
-    private NativeResourceCleaner cleaner;
+    static NativeResourceCleaner cleaner;
 
     Token getToken() {
         return token;
@@ -959,32 +959,38 @@ public final class SunPKCS11 extends AuthProvider {
     }
 
     private static class NativeResourceCleaner extends Thread {
+        private long sleepMillis = 5_000L;
+        private int count = 0;
+        boolean refFound;
 
-        private int iterationCount;
-
-        private NativeResourceCleaner(String name) {
-            super((ThreadGroup)null, "Cleanup-" + name);
-            //setContextClassLoader(null);
+        private NativeResourceCleaner() {
+            super((ThreadGroup)null, "Cleanup-SunPKCS11");
+            setContextClassLoader(null);
             setDaemon(true);
             setPriority(Thread.MIN_PRIORITY);
-            iterationCount = Integer.MAX_VALUE;
         }
 
         @Override
         public void run() {
-            while (iterationCount-- > 0) {
+            while (true) {
                 try {
-                    sleep(2_000); // 2K millisec
+                    sleep(sleepMillis);
                 } catch (InterruptedException ie) {
                     break;
                 }
-                P11Key.drainRefQueue();
-                Session.drainRefQueue();
+                refFound = P11Key.drainRefQueue() || Session.drainRefQueue();
+                if (!refFound) {
+                    count++;
+                } else {
+                    count = 0;
+                    sleepMillis = 5_000L;
+                }
+                if (count > 100) {
+                    // no reference freed for some time
+                    // increase the sleep time
+                    sleepMillis = 60_000;
+                }
             }
-        }
-
-        void disable() {
-            iterationCount = 10;
         }
     }
 
@@ -1151,8 +1157,10 @@ public final class SunPKCS11 extends AuthProvider {
         });
 
         this.token = token;
-        this.cleaner = new NativeResourceCleaner(getName());
-        this.cleaner.start();
+        if (cleaner == null) {
+            cleaner = new NativeResourceCleaner();
+            cleaner.start();
+        }
     }
 
     private static final class P11Service extends Service {
@@ -1540,21 +1548,20 @@ public final class SunPKCS11 extends AuthProvider {
         }
     }
 
-    @Override
     public void terminate() {
         isShuttingDown = true;
-/*
+
         try {
-            // XXX requires logout permission AuthProvider.name?
             logout();
         } catch (LoginException le) {
-            // best effort
-            System.out.println("Ignoring Exception during LogOut");
-            le.printStackTrace();
+            if (debug != null) {
+                // best effort
+                System.out.println("Ignoring Exception during logout");
+                le.printStackTrace();
+            }
         }
-*/
+
         token.destroy();
-        System.out.println("At end of terminate(), This.token = " + this.token);
     }
 
     /**

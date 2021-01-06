@@ -65,7 +65,6 @@ final class Session implements Comparable<Session> {
     Session(Token token, long id) {
         this.token = token;
         this.id = id;
-        System.out.println("Created session " + id);
         createdObjects = new AtomicInteger();
         id();
         sessionRef = new SessionRef(this, id, token);
@@ -132,12 +131,15 @@ final class Session implements Comparable<Session> {
         sessionRef.dispose();
     }
 
-    static void drainRefQueue() {
+    static boolean drainRefQueue() {
+        boolean found = false;
         while (true) {
             SessionRef next = (SessionRef) SessionRef.refQueue.poll();
             if (next == null) break;
+            found = true;
             next.dispose();
         }
+        return found;
     }
 }
 /*
@@ -169,10 +171,7 @@ final class SessionRef extends PhantomReference<Session>
         refList.remove(this);
         try {
             if (token.isPresent(id)) {
-                System.out.println("Dispose and close session " + id);
                 token.p11.C_CloseSession(id);
-            } else {
-                System.out.println("Dispose session " + id);
             }
         } catch (PKCS11Exception | ProviderException e1) {
             // ignore

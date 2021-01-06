@@ -165,14 +165,17 @@ abstract class P11Key implements Key, Length {
         return (b == null) ? null : b.clone();
     }
 
-    static void drainRefQueue() {
+    static boolean drainRefQueue() {
+        boolean found = false;
         while (true) {
             SessionKeyRef next = (SessionKeyRef) SessionKeyRef.refQueue.poll();
             if (next == null) {
                 break;
             }
+            found = true;
             next.dispose();
         }
+        return found;
     }
 
     abstract byte[] getEncodedInternal();
@@ -1222,7 +1225,6 @@ final class NativeKeyHolder {
         this.refCount = -1;
         byte[] ki = null;
         if (isTokenObject) {
-            System.out.println("Token key: " + keyID + " (no ref)");
             this.ref = null;
         } else {
             // Try extracting key info, if any error, disable it
@@ -1262,8 +1264,6 @@ final class NativeKeyHolder {
             }
             this.ref = new SessionKeyRef(p11Key, keyID, wrapperKeyUsed,
                     keySession);
-            System.out.println("Session key: " + keyID + " (ref " + this.ref +
-                    ")" );
         }
 
         this.nativeKeyInfo = ((ki == null || ki.length == 0)? null : ki);
@@ -1374,8 +1374,6 @@ final class SessionKeyRef extends PhantomReference<P11Key> {
     }
 
     private void updateNativeKey(long newKeyID, Session newSession) {
-        System.out.println("KeyRef: " + this + ", from " + keyID + " to " +
-                newKeyID);
         if (newKeyID == 0) {
             assert(newSession == null);
             Token token = session.token;
