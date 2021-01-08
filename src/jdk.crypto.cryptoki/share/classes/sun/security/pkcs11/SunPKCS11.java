@@ -961,7 +961,7 @@ public final class SunPKCS11 extends AuthProvider {
     private static class NativeResourceCleaner extends Thread {
         private long sleepMillis = 5_000L;
         private int count = 0;
-        boolean refFound;
+        boolean p11RefFound, SessRefFound;
 
         private NativeResourceCleaner() {
             super((ThreadGroup)null, "Cleanup-SunPKCS11");
@@ -978,8 +978,9 @@ public final class SunPKCS11 extends AuthProvider {
                 } catch (InterruptedException ie) {
                     break;
                 }
-                refFound = P11Key.drainRefQueue() || Session.drainRefQueue();
-                if (!refFound) {
+                p11RefFound = P11Key.drainRefQueue();
+                SessRefFound = Session.drainRefQueue();
+                if (!p11RefFound && !SessRefFound) {
                     count++;
                 } else {
                     count = 0;
