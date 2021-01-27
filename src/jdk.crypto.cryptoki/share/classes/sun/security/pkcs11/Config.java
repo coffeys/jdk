@@ -143,7 +143,15 @@ final class Config {
     // how often to test for token insertion, if no token is present
     private int insertionCheckInterval = 2000;
 
-    // flag inidicating whether to omit the call to C_Initialize()
+    // low ms value to indicate how often native cleaner thread is called
+    private int resourceCleanerLowInterval = 2_000;
+    // high ms value to indicate how often native cleaner thread is called
+    private int resourceCleanerHighInterval = 60_000;
+
+    // should TokenPoller start after logout() is called
+    private boolean noPollerAfterLogout;
+
+    // flag indicating whether to omit the call to C_Initialize()
     // should be used only if we are running within a process that
     // has already called it (e.g. Plugin inside of Mozilla/NSS)
     private boolean omitInitialize = false;
@@ -275,6 +283,18 @@ final class Config {
 
     boolean getExplicitCancel() {
         return explicitCancel;
+    }
+
+    boolean getNoPollerAfterLogout() {
+        return noPollerAfterLogout;
+    }
+
+    int getResourceCleanerLowInterval() {
+        return resourceCleanerLowInterval;
+    }
+
+    int getResourceCleanerHighInterval() {
+        return resourceCleanerHighInterval;
     }
 
     int getInsertionCheckInterval() {
@@ -411,6 +431,18 @@ final class Config {
                 if (insertionCheckInterval < 100) {
                     throw excLine(word + " must be at least 100 ms");
                 }
+            } else if (word.endsWith("cleaner.lowInterval")) {
+                resourceCleanerLowInterval = parseIntegerEntry(word);
+                if (resourceCleanerLowInterval < 1_000) {
+                    throw excLine(word + " must be at least 1000 ms");
+                }
+            } else if (word.endsWith("cleaner.highInterval")) {
+                resourceCleanerHighInterval = parseIntegerEntry(word);
+                if (resourceCleanerHighInterval < 1_000) {
+                    throw excLine(word + " must be at least 1000 ms");
+                }
+            } else if (word.endsWith("noPollerAfterLogout")) {
+                noPollerAfterLogout = parseBooleanEntry(word);
             } else if (word.equals("showInfo")) {
                 showInfo = parseBooleanEntry(word);
             } else if (word.equals("keyStoreCompatibilityMode")) {

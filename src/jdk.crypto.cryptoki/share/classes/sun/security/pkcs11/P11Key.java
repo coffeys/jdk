@@ -142,7 +142,6 @@ abstract class P11Key implements Key, Length {
                 extractable && !tokenObject);
         this.keyIDHolder = new NativeKeyHolder(this, keyID, session,
                 extractKeyInfo, tokenObject);
-        //drainRefQueue();
     }
 
     public long getKeyID() {

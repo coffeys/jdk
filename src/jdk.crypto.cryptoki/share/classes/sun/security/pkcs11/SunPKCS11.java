@@ -81,8 +81,6 @@ public final class SunPKCS11 extends AuthProvider {
 
     private volatile Token token;
 
-    volatile boolean isShuttingDown = false;
-
     private TokenPoller poller;
 
     static NativeResourceCleaner cleaner;
@@ -958,8 +956,8 @@ public final class SunPKCS11 extends AuthProvider {
         return (token != null) && token.isValid();
     }
 
-    private static class NativeResourceCleaner extends Thread {
-        private long sleepMillis = 5_000L;
+    private class NativeResourceCleaner extends Thread {
+        private long sleepMillis = config.getResourceCleanerLowInterval();
         private int count = 0;
         boolean p11RefFound, SessRefFound;
 
@@ -984,12 +982,12 @@ public final class SunPKCS11 extends AuthProvider {
                     count++;
                 } else {
                     count = 0;
-                    sleepMillis = 5_000L;
+                    sleepMillis = config.getResourceCleanerLowInterval();
                 }
                 if (count > 100) {
                     // no reference freed for some time
                     // increase the sleep time
-                    sleepMillis = 60_000;
+                    sleepMillis = config.getResourceCleanerHighInterval();
                 }
             }
         }
@@ -1010,8 +1008,10 @@ public final class SunPKCS11 extends AuthProvider {
                 return null;
             }
         });
-        // keep polling for token insertion if not shutting down
-        if (!isShuttingDown) createPoller();
+        // keep polling for token insertion unless configured not to
+        if (!config.getNoPollerAfterLogout()) {
+            createPoller();
+        }
     }
 
     private static boolean isLegacy(CK_MECHANISM_INFO mechInfo)
@@ -1519,6 +1519,7 @@ public final class SunPKCS11 extends AuthProvider {
                 if (debug != null) {
                     debug.println("user not logged in");
                 }
+                token.destroy();
                 return;
             }
         } catch (PKCS11Exception e) {
@@ -1546,23 +1547,8 @@ public final class SunPKCS11 extends AuthProvider {
             throw le;
         } finally {
             token.releaseSession(session);
+            token.destroy();
         }
-    }
-
-    public void terminate() {
-        isShuttingDown = true;
-
-        try {
-            logout();
-        } catch (LoginException le) {
-            if (debug != null) {
-                // best effort
-                System.out.println("Ignoring Exception during logout");
-                le.printStackTrace();
-            }
-        }
-
-        token.destroy();
     }
 
     /**

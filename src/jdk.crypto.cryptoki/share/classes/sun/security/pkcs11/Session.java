@@ -68,7 +68,6 @@ final class Session implements Comparable<Session> {
         createdObjects = new AtomicInteger();
         id();
         sessionRef = new SessionRef(this, id, token);
-        //drainRefQueue();
     }
 
     public int compareTo(Session other) {
