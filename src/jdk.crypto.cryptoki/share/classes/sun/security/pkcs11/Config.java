@@ -148,8 +148,8 @@ final class Config {
     // high ms value to indicate how often native cleaner thread is called
     private int resourceCleanerHighInterval = 60_000;
 
-    // should TokenPoller start after logout() is called
-    private boolean noPollerAfterLogout;
+    // should Token be destroyed after logout()
+    private boolean destroyTokenAfterLogout;
 
     // flag indicating whether to omit the call to C_Initialize()
     // should be used only if we are running within a process that
@@ -285,8 +285,8 @@ final class Config {
         return explicitCancel;
     }
 
-    boolean getNoPollerAfterLogout() {
-        return noPollerAfterLogout;
+    boolean getDestroyTokenAfterLogout() {
+        return destroyTokenAfterLogout;
     }
 
     int getResourceCleanerLowInterval() {
@@ -441,8 +441,8 @@ final class Config {
                 if (resourceCleanerHighInterval < 1_000) {
                     throw excLine(word + " must be at least 1000 ms");
                 }
-            } else if (word.endsWith("noPollerAfterLogout")) {
-                noPollerAfterLogout = parseBooleanEntry(word);
+            } else if (word.endsWith("destroyTokenAfterLogout")) {
+                destroyTokenAfterLogout = parseBooleanEntry(word);
             } else if (word.equals("showInfo")) {
                 showInfo = parseBooleanEntry(word);
             } else if (word.equals("keyStoreCompatibilityMode")) {

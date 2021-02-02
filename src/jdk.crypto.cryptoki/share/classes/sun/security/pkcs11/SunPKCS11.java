@@ -897,7 +897,7 @@ public final class SunPKCS11 extends AuthProvider {
 
         private TokenPoller(SunPKCS11 provider) {
             super((ThreadGroup)null, "Poller-" + provider.getName());
-            //setContextClassLoader(null);
+            setContextClassLoader(null);
             setDaemon(true);
             setPriority(Thread.MIN_PRIORITY);
             this.provider = provider;
@@ -1009,7 +1009,7 @@ public final class SunPKCS11 extends AuthProvider {
             }
         });
         // keep polling for token insertion unless configured not to
-        if (!config.getNoPollerAfterLogout()) {
+        if (removable && !config.getDestroyTokenAfterLogout()) {
             createPoller();
         }
     }
@@ -1372,12 +1372,12 @@ public final class SunPKCS11 extends AuthProvider {
                         ("authProvider." + this.getName()));
         }
 
-        if (hasValidToken() == false) {
+        if (!hasValidToken()) {
             throw new LoginException("No token present");
+
         }
 
         // see if a login is required
-
         if ((token.tokenInfo.flags & CKF_LOGIN_REQUIRED) == 0) {
             if (debug != null) {
                 debug.println("login operation not required for token - " +
@@ -1489,7 +1489,6 @@ public final class SunPKCS11 extends AuthProvider {
      *  this provider's <code>getName</code> method
      */
     public void logout() throws LoginException {
-
         if (!isConfigured()) {
             throw new IllegalStateException("Configuration is required");
         }
@@ -1515,11 +1514,13 @@ public final class SunPKCS11 extends AuthProvider {
         }
 
         try {
-            if (token.isLoggedInNow(null) == false) {
+            if (!token.isLoggedInNow(null)) {
                 if (debug != null) {
                     debug.println("user not logged in");
                 }
-                token.destroy();
+                if (config.getDestroyTokenAfterLogout()) {
+                    token.destroy();
+                }
                 return;
             }
         } catch (PKCS11Exception e) {
@@ -1547,7 +1548,9 @@ public final class SunPKCS11 extends AuthProvider {
             throw le;
         } finally {
             token.releaseSession(session);
-            token.destroy();
+            if (config.getDestroyTokenAfterLogout()) {
+                token.destroy();
+            }
         }
     }
 
