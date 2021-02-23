@@ -84,7 +84,6 @@ public class MultipleLogins extends PKCS11Test {
             gc.await(() -> weakRef[finalI].get() == null);
             if (!weakRef[i].refersTo(null)) {
                 throw new RuntimeException("Expected SunPKCS11 Provider to be GC'ed..");
-                //System.out.println("Expected SunPKCS11 Provider to be GC'ed.." + i);
             }
         }
     }
@@ -93,76 +92,30 @@ public class MultipleLogins extends PKCS11Test {
     }
 
     private static void test(SunPKCS11 p) throws Exception {
-        int testnum = 1;
-
         KeyStore ks = KeyStore.getInstance(KS_TYPE, p);
 
-        // check instance
-        if (ks.getProvider() instanceof AuthProvider) {
-            System.out.println("keystore provider instance of AuthProvider");
-            System.out.println("test " + testnum++ + " passed");
-        } else {
-            throw new SecurityException("did not get AuthProvider KeyStore");
+        p.setCallbackHandler(new PasswordCallbackHandler());
+        try {
+            ks.load(null, (char[]) null);
+        } catch (IOException e) {
+            if (!e.getMessage().contains("load failed")) {
+                // we expect the keystore load to fail
+                throw new RuntimeException("unexpected exception", e);
+            }
         }
+
+        p.logout();
 
         try {
-
-            // test app-provided callback
-            System.out.println("*** enter [foo] as the password ***");
-            password = new char[] { 'f', 'o', 'o' };
-
-            p.login(new Subject(), new PasswordCallbackHandler());
-            p.logout();
-            throw new SecurityException("test failed, expected LoginException");
-        } catch (FailedLoginException fle) {
-            System.out.println("test " + testnum++ + " passed");
+            ks.load(null, (char[]) null);
+        } catch (IOException e) {
+            if (e.getCause() instanceof LoginException &&
+                    e.getCause().getMessage().contains("No token present")) {
+                // expected
+            } else {
+                throw new RuntimeException("Token was present", e);
+            }
         }
-
-//        try {
-//
-//            // test default callback
-//            System.out.println("*** enter [foo] as the password ***");
-//            password = new char[] { 'f', 'o', 'o' };
-//
-//            Security.setProperty("auth.login.defaultCallbackHandler",
-//                "Login$PasswordCallbackHandler");
-//            p.login(new Subject(), null);
-//            p.logout();
-//            throw new SecurityException("test failed, expected LoginException");
-//        } catch (FailedLoginException fle) {
-//            System.out.println("test " + testnum++ + " passed");
-//        }
-//
-//        // test provider-set callback
-//        System.out.println("*** enter test12 (correct) password ***");
-//        password = new char[] { 't', 'e', 's', 't', '1', '2' };
-//
-//        Security.setProperty("auth.login.defaultCallbackHandler", "");
-//        p.setCallbackHandler(new PasswordCallbackHandler());
-//        p.login(new Subject(), null);
-//        System.out.println("test " + testnum++ + " passed");
-//
-//        // test user already logged in
-//        p.setCallbackHandler(null);
-//        p.login(new Subject(), null);
-//        System.out.println("test " + testnum++ + " passed");
-//
-//        // logout
-//        p.logout();
-//
-//        // call KeyStore.load with a NULL password, and get prompted for PIN
-//        p.setCallbackHandler(new PasswordCallbackHandler());
-//        try {
-//            ks.load(null, (char[]) null);
-//        } catch (IOException e) {
-//            if (e.getCause() instanceof LoginException &&
-//                    e.getCause().getMessage().contains("No token present")) {
-//                //ignore
-//            } else {
-//                throw new RuntimeException("Unexpected result", e);
-//            }
-//        }
-        System.out.println("test " + testnum++ + " passed");
     }
 
     public static class PasswordCallbackHandler implements CallbackHandler {
