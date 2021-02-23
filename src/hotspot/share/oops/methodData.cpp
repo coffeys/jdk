@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2000, 2021, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -24,7 +24,7 @@
 
 #include "precompiled.hpp"
 #include "ci/ciMethodData.hpp"
-#include "classfile/systemDictionary.hpp"
+#include "classfile/vmSymbols.hpp"
 #include "compiler/compilationPolicy.hpp"
 #include "compiler/compilerOracle.hpp"
 #include "interpreter/bytecode.hpp"
@@ -32,6 +32,7 @@
 #include "interpreter/linkResolver.hpp"
 #include "memory/metaspaceClosure.hpp"
 #include "memory/resourceArea.hpp"
+#include "oops/klass.inline.hpp"
 #include "oops/methodData.inline.hpp"
 #include "prims/jvmtiRedefineClasses.hpp"
 #include "runtime/arguments.hpp"
@@ -40,6 +41,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/safepointVerifiers.hpp"
+#include "runtime/signature.hpp"
 #include "utilities/align.hpp"
 #include "utilities/copy.hpp"
 
@@ -661,7 +663,7 @@ MethodData* MethodData::allocate(ClassLoaderData* loader_data, const methodHandl
 }
 
 int MethodData::bytecode_cell_count(Bytecodes::Code code) {
-  if (is_client_compilation_mode_vm()) {
+  if (CompilerConfig::is_c1_simple_only() && !ProfileInterpreter) {
     return no_profile_data;
   }
   switch (code) {
@@ -784,7 +786,7 @@ bool MethodData::is_speculative_trap_bytecode(Bytecodes::Code code) {
   case Bytecodes::_ifnonnull:
   case Bytecodes::_invokestatic:
 #ifdef COMPILER2
-    if (is_server_compilation_mode_vm()) {
+    if (CompilerConfig::is_c2_enabled()) {
       return UseTypeSpeculation;
     }
 #endif
@@ -968,7 +970,7 @@ int MethodData::compute_allocation_size_in_words(const methodHandle& method) {
 // the segment in bytes.
 int MethodData::initialize_data(BytecodeStream* stream,
                                        int data_index) {
-  if (is_client_compilation_mode_vm()) {
+  if (CompilerConfig::is_c1_simple_only() && !ProfileInterpreter) {
     return 0;
   }
   int cell_count = -1;
@@ -1206,7 +1208,7 @@ void MethodData::post_initialize(BytecodeStream* stream) {
 MethodData::MethodData(const methodHandle& method)
   : _method(method()),
     _extra_data_lock(Mutex::leaf, "MDO extra data lock"),
-    _compiler_counters(method()),
+    _compiler_counters(),
     _parameters_type_data_di(parameters_uninitialized) {
   initialize();
 }
@@ -1217,6 +1219,7 @@ void MethodData::initialize() {
   ResourceMark rm(thread);
 
   init();
+  set_creation_mileage(mileage_of(method()));
 
   // Go through the bytecodes and allocate and initialize the
   // corresponding data cells.
@@ -1254,7 +1257,7 @@ void MethodData::initialize() {
   object_size += extra_size + arg_data_size;
 
   int parms_cell = ParametersTypeData::compute_cell_count(method());
-  // If we are profiling parameters, we reserver an area near the end
+  // If we are profiling parameters, we reserved an area near the end
   // of the MDO after the slots for bytecodes (because there's no bci
   // for method entry so they don't fit with the framework for the
   // profiling of bytecodes). We store the offset within the MDO of
@@ -1281,6 +1284,7 @@ void MethodData::initialize() {
 }
 
 void MethodData::init() {
+  _compiler_counters = CompilerCounters(); // reset compiler counters
   _invocation_counter.init();
   _backedge_counter.init();
   _invocation_counter_start = 0;
@@ -1324,29 +1328,11 @@ void MethodData::init() {
 
 // Get a measure of how much mileage the method has on it.
 int MethodData::mileage_of(Method* method) {
-  int mileage = 0;
-  if (TieredCompilation) {
-    mileage = MAX2(method->invocation_count(), method->backedge_count());
-  } else {
-    int iic = method->interpreter_invocation_count();
-    if (mileage < iic)  mileage = iic;
-    MethodCounters* mcs = method->method_counters();
-    if (mcs != NULL) {
-      InvocationCounter* ic = mcs->invocation_counter();
-      InvocationCounter* bc = mcs->backedge_counter();
-      int icval = ic->count();
-      if (ic->carry()) icval += CompileThreshold;
-      if (mileage < icval)  mileage = icval;
-      int bcval = bc->count();
-      if (bc->carry()) bcval += CompileThreshold;
-      if (mileage < bcval)  mileage = bcval;
-    }
-  }
-  return mileage;
+  return MAX2(method->invocation_count(), method->backedge_count());
 }
 
 bool MethodData::is_mature() const {
-  return CompilationPolicy::policy()->is_mature(_method);
+  return CompilationPolicy::is_mature(_method);
 }
 
 // Translate a bci to its corresponding data index (di).
@@ -1585,11 +1571,24 @@ bool MethodData::profile_jsr292(const methodHandle& m, int bci) {
 bool MethodData::profile_unsafe(const methodHandle& m, int bci) {
   Bytecode_invoke inv(m , bci);
   if (inv.is_invokevirtual()) {
-    if (inv.klass() == vmSymbols::jdk_internal_misc_Unsafe() ||
-        inv.klass() == vmSymbols::sun_misc_Unsafe()) {
-      ResourceMark rm;
-      char* name = inv.name()->as_C_string();
-      if (!strncmp(name, "get", 3) || !strncmp(name, "put", 3)) {
+    Symbol* klass = inv.klass();
+    if (klass == vmSymbols::jdk_internal_misc_Unsafe() ||
+        klass == vmSymbols::sun_misc_Unsafe() ||
+        klass == vmSymbols::jdk_internal_misc_ScopedMemoryAccess()) {
+      Symbol* name = inv.name();
+      if (name->starts_with("get") || name->starts_with("put")) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool MethodData::profile_memory_access(const methodHandle& m, int bci) {
+  Bytecode_invoke inv(m , bci);
+  if (inv.is_invokestatic()) {
+    if (inv.klass() == vmSymbols::jdk_incubator_foreign_MemoryAccess()) {
+      if (inv.name()->starts_with("get") || inv.name()->starts_with("set")) {
         return true;
       }
     }
@@ -1623,6 +1622,10 @@ bool MethodData::profile_arguments_for_invoke(const methodHandle& m, int bci) {
   }
 
   if (profile_unsafe(m, bci)) {
+    return true;
+  }
+
+  if (profile_memory_access(m, bci)) {
     return true;
   }
 
