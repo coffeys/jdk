@@ -143,10 +143,10 @@ final class Config {
     // how often to test for token insertion, if no token is present
     private int insertionCheckInterval = 2000;
 
-    // low ms value to indicate how often native cleaner thread is called
-    private int resourceCleanerLowInterval = 2_000;
-    // high ms value to indicate how often native cleaner thread is called
-    private int resourceCleanerHighInterval = 60_000;
+    // short ms value to indicate how often native cleaner thread is called
+    private int resourceCleanerShortInterval = 2_000;
+    // long ms value to indicate how often native cleaner thread is called
+    private int resourceCleanerLongInterval = 60_000;
 
     // should Token be destroyed after logout()
     private boolean destroyTokenAfterLogout;
@@ -289,12 +289,12 @@ final class Config {
         return destroyTokenAfterLogout;
     }
 
-    int getResourceCleanerLowInterval() {
-        return resourceCleanerLowInterval;
+    int getResourceCleanerShortInterval() {
+        return resourceCleanerShortInterval;
     }
 
-    int getResourceCleanerHighInterval() {
-        return resourceCleanerHighInterval;
+    int getResourceCleanerLongInterval() {
+        return resourceCleanerLongInterval;
     }
 
     int getInsertionCheckInterval() {
@@ -431,14 +431,14 @@ final class Config {
                 if (insertionCheckInterval < 100) {
                     throw excLine(word + " must be at least 100 ms");
                 }
-            } else if (word.endsWith("cleaner.lowInterval")) {
-                resourceCleanerLowInterval = parseIntegerEntry(word);
-                if (resourceCleanerLowInterval < 1_000) {
+            } else if (word.endsWith("cleaner.shortInterval")) {
+                resourceCleanerShortInterval = parseIntegerEntry(word);
+                if (resourceCleanerShortInterval < 1_000) {
                     throw excLine(word + " must be at least 1000 ms");
                 }
-            } else if (word.endsWith("cleaner.highInterval")) {
-                resourceCleanerHighInterval = parseIntegerEntry(word);
-                if (resourceCleanerHighInterval < 1_000) {
+            } else if (word.endsWith("cleaner.longInterval")) {
+                resourceCleanerLongInterval = parseIntegerEntry(word);
+                if (resourceCleanerLongInterval < 1_000) {
                     throw excLine(word + " must be at least 1000 ms");
                 }
             } else if (word.endsWith("destroyTokenAfterLogout")) {

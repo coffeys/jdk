@@ -958,7 +958,7 @@ public final class SunPKCS11 extends AuthProvider {
     }
 
     private class NativeResourceCleaner extends Thread {
-        private long sleepMillis = config.getResourceCleanerLowInterval();
+        private long sleepMillis = config.getResourceCleanerShortInterval();
         private int count = 0;
         boolean p11RefFound, SessRefFound;
 
@@ -983,12 +983,12 @@ public final class SunPKCS11 extends AuthProvider {
                     count++;
                 } else {
                     count = 0;
-                    sleepMillis = config.getResourceCleanerLowInterval();
+                    sleepMillis = config.getResourceCleanerShortInterval();
                 }
                 if (count > 100) {
                     // no reference freed for some time
                     // increase the sleep time
-                    sleepMillis = config.getResourceCleanerHighInterval();
+                    sleepMillis = config.getResourceCleanerLongInterval();
                 }
             }
         }
