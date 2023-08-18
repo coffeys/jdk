@@ -44,9 +44,8 @@ public final class LoggerFinderLoader {
 
     private static volatile System.LoggerFinder service;
     private static final Object lock = new int[0];
-    private static final ThreadLocal<Boolean> loading =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
-    private static System.LoggerFinder simpleLoggerFinder;
+    private static boolean loading;
+    private static System.LoggerFinder noOpLoggerFinder;
     static final Permission CLASSLOADER_PERMISSION =
             SecurityConstants.GET_CLASSLOADER_PERMISSION;
     static final Permission READ_PERMISSION =
@@ -79,9 +78,17 @@ public final class LoggerFinderLoader {
         synchronized(lock) {
             result = service;
             if (result != null) return result;
-            result = loadLoggerFinder();
-            if (result != getSimpleLoggerFinderInstance()) {
-                service = result;
+            if (loading) {
+                // thread already loading LoggerFinder. Return a simple no-op
+                // LoggerFinder instance to avoid recursion caused by jar
+                // loading code which may trigger other Logger calls.
+                return getNoOpLoggerFinderInstance();
+            }
+            loading = true;
+            try {
+                result = service = loadLoggerFinder();
+            } finally {
+                loading = false;
             }
         }
         // Since the LoggerFinder is already loaded - we can stop using
@@ -132,13 +139,6 @@ public final class LoggerFinderLoader {
     // is found returns the default (possibly JUL based) implementation
     private static System.LoggerFinder loadLoggerFinder() {
         System.LoggerFinder result;
-        if (loading.get().equals(Boolean.TRUE)) {
-            // thread already loading LoggerFinder. Return a simple no-op
-            // LoggerFinder instance to avoid recursion caused by jar
-            // loading code which may trigger other Logger calls.
-            return getSimpleLoggerFinderInstance();
-        }
-        loading.set(Boolean.TRUE);
         try {
             // Iterator iterates with the access control context stored
             // at ServiceLoader creation time.
@@ -179,8 +179,6 @@ public final class LoggerFinderLoader {
                         "Exception raised trying to instantiate LoggerFinder", x);
                 }
             }
-        } finally {
-            loading.set(Boolean.FALSE);
         }
         return result;
     }
@@ -230,17 +228,20 @@ public final class LoggerFinderLoader {
         return service();
     }
 
-    private static System.LoggerFinder getSimpleLoggerFinderInstance() {
-        if (simpleLoggerFinder == null) {
-            simpleLoggerFinder = new SimpleLoggerFinder();
+    private static System.LoggerFinder getNoOpLoggerFinderInstance() {
+        if (noOpLoggerFinder == null) {
+            noOpLoggerFinder = new NoOpLoggerFinder();
         }
-        return simpleLoggerFinder;
+        return noOpLoggerFinder;
     }
 
-    private static class SimpleLoggerFinder extends System.LoggerFinder {
+    private static class NoOpLoggerFinder extends System.LoggerFinder {
+
+        static final NoOpLogger NOOP_LOGGER = new NoOpLogger("NoOpLogger");
+
         @Override
         public System.Logger getLogger(String name, Module module) {
-            return new NoOpLogger(name);
+            return NOOP_LOGGER;
         }
     }
 

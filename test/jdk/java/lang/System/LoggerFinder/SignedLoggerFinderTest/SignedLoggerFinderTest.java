@@ -72,7 +72,10 @@ public class SignedLoggerFinderTest {
     private static final String ALIAS = "JavaTest";
     private static final String STOREPASS = "changeit";
     private static final String KEYPASS = "changeit";
-    private static final String jarName = "SimpleLoggerFinder.jar";
+    private static final Path jarPath1 =
+        Path.of(System.getProperty("test.classes", "."), "SimpleLoggerFinder.jar");
+    private static final Path jarPath2 =
+            Path.of(System.getProperty("test.classes", "."), "SimpleLoggerFinder2.jar");
 
     public static void main(String[] args) throws Throwable {
         init = args.length >=1 && args[0].equals("init");
@@ -85,7 +88,7 @@ public class SignedLoggerFinderTest {
             cmds.addAll(List.of(
                     "-classpath",
                     System.getProperty("test.classes") + File.pathSeparator +
-                            Path.of(System.getProperty("test.classes"), "*").toString(),
+                        jarPath1.toString() + File.pathSeparator + jarPath2.toString(),
                     "-Dtest.classes=" + System.getProperty("test.classes"),
                     // following debug property seems useful to tickle the issue
                     "-Dsun.misc.URLClassPath.debug=true",
@@ -115,20 +118,18 @@ public class SignedLoggerFinderTest {
             genKey();
         }
 
-        Path jarPath = Path.of(System.getProperty("test.classes", "."), jarName);
         Path classes = Paths.get(System.getProperty("test.classes", ""));
-        JarUtils.createJarFile(jarPath,
+        JarUtils.createJarFile(jarPath1,
                 classes,
                 classes.resolve("loggerfinder/SimpleLoggerFinder.class"),
                 classes.resolve("loggerfinder/SimpleLoggerFinder$NoOpLogger.class"));
-        JarUtils.updateJarFile(jarPath, Path.of(System.getProperty("test.src")),
+        JarUtils.updateJarFile(jarPath1, Path.of(System.getProperty("test.src")),
                 Path.of("META-INF", "services", "java.lang.System$LoggerFinder"));
         if (signJars) {
-            signJar(jarPath.toString());
+            signJar(jarPath1.toString());
         }
         // multiple signed jars with services to have ServiceLoader iteration
-        Files.copy(jarPath, Path.of(System.getProperty("test.classes", "."),
-                "copy" + jarName), REPLACE_EXISTING);
+        Files.copy(jarPath1, jarPath2, REPLACE_EXISTING);
     }
 
     private static void genKey() throws Throwable {
