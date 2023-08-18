@@ -182,7 +182,7 @@ public final class LoggerFinderLoader {
         } finally {
             loading.set(Boolean.FALSE);
         }
-        return service = result;
+        return result;
     }
 
     @SuppressWarnings("removal")
