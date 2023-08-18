@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -30,6 +30,7 @@ import java.security.Permission;
 import java.security.PrivilegedAction;
 import java.util.Iterator;
 import java.util.Locale;
+import java.util.ResourceBundle;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import sun.security.util.SecurityConstants;
@@ -40,8 +41,12 @@ import sun.security.action.GetPropertyAction;
  * Helper class used to load the {@link java.lang.System.LoggerFinder}.
  */
 public final class LoggerFinderLoader {
+
     private static volatile System.LoggerFinder service;
     private static final Object lock = new int[0];
+    private static final ThreadLocal<Boolean> loading =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static System.LoggerFinder simpleLoggerFinder;
     static final Permission CLASSLOADER_PERMISSION =
             SecurityConstants.GET_CLASSLOADER_PERMISSION;
     static final Permission READ_PERMISSION =
@@ -58,7 +63,7 @@ public final class LoggerFinderLoader {
     // DEBUG => Do not fail, use plain default (simple logger) implementation,
     //          prints warning and exception stack trace on console.
     // QUIET => Do not fail and stay silent.
-    private static enum ErrorPolicy { ERROR, WARNING, DEBUG, QUIET };
+    private enum ErrorPolicy { ERROR, WARNING, DEBUG, QUIET };
 
     // This class is static and cannot be instantiated.
     private LoggerFinderLoader() {
@@ -68,15 +73,21 @@ public final class LoggerFinderLoader {
 
     // Return the loaded LoggerFinder, or load it if not already loaded.
     private static System.LoggerFinder service() {
-        if (service != null) return service;
+        var result = service;
+        if (result != null) return result;
+
         synchronized(lock) {
-            if (service != null) return service;
-            service = loadLoggerFinder();
+            result = service;
+            if (result != null) return result;
+            result = loadLoggerFinder();
+            if (result != getSimpleLoggerFinderInstance()) {
+                service = result;
+            }
         }
         // Since the LoggerFinder is already loaded - we can stop using
         // temporary loggers.
         BootstrapLogger.redirectTemporaryLoggers();
-        return service;
+        return result;
     }
 
     // Get configuration error policy
@@ -121,6 +132,13 @@ public final class LoggerFinderLoader {
     // is found returns the default (possibly JUL based) implementation
     private static System.LoggerFinder loadLoggerFinder() {
         System.LoggerFinder result;
+        if (loading.get().equals(Boolean.TRUE)) {
+            // thread already loading LoggerFinder. Return a simple no-op
+            // LoggerFinder instance to avoid recursion caused by jar
+            // loading code which may trigger other Logger calls.
+            return getSimpleLoggerFinderInstance();
+        }
+        loading.set(Boolean.TRUE);
         try {
             // Iterator iterates with the access control context stored
             // at ServiceLoader creation time.
@@ -161,8 +179,10 @@ public final class LoggerFinderLoader {
                         "Exception raised trying to instantiate LoggerFinder", x);
                 }
             }
+        } finally {
+            loading.set(Boolean.FALSE);
         }
-        return result;
+        return service = result;
     }
 
     @SuppressWarnings("removal")
@@ -210,4 +230,43 @@ public final class LoggerFinderLoader {
         return service();
     }
 
+    private static System.LoggerFinder getSimpleLoggerFinderInstance() {
+        if (simpleLoggerFinder == null) {
+            simpleLoggerFinder = new SimpleLoggerFinder();
+        }
+        return simpleLoggerFinder;
+    }
+
+    private static class SimpleLoggerFinder extends System.LoggerFinder {
+        @Override
+        public System.Logger getLogger(String name, Module module) {
+            return new NoOpLogger(name);
+        }
+    }
+
+    private static class NoOpLogger implements System.Logger {
+        private final String name;
+
+        public NoOpLogger(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public boolean isLoggable(Level level) {
+            return false;
+        }
+
+        @Override
+        public void log(Level level, ResourceBundle bundle, String msg, Throwable thrown) {
+        }
+
+        @Override
+        public void log(Level level, ResourceBundle bundle, String format, Object... params) {
+        }
+    }
 }
