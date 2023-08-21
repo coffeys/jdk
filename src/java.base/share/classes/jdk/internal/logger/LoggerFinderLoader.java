@@ -42,6 +42,7 @@ import sun.security.action.GetPropertyAction;
 public final class LoggerFinderLoader {
     private static volatile System.LoggerFinder service;
     private static final Object lock = new int[0];
+    private static final Object loadingLock = new int[0];
     private static volatile boolean loading;
     static final Permission CLASSLOADER_PERMISSION =
             SecurityConstants.GET_CLASSLOADER_PERMISSION;
@@ -71,11 +72,13 @@ public final class LoggerFinderLoader {
         if (service != null) return service;
         synchronized(lock) {
             if (service != null) return service;
-            try {
-                loading = true;
-                service = loadLoggerFinder();
-            } finally {
-                loading = false;
+            synchronized (loadingLock) {
+                try {
+                    loading = true;
+                    service = loadLoggerFinder();
+                } finally {
+                    loading = false;
+                }
             }
         }
         // Since the LoggerFinder is already loaded - we can stop using
@@ -85,7 +88,9 @@ public final class LoggerFinderLoader {
     }
 
     static boolean isLoading() {
-        return loading;
+        synchronized (loadingLock) {
+            return loading;
+        }
     }
 
     // Get configuration error policy

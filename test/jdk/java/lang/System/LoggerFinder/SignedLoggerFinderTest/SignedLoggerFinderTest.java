@@ -123,8 +123,10 @@ public class SignedLoggerFinderTest {
             jf2.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
             Security.setProperty("test", "test");
 
+            assertEquals(System.LoggerFinder.getLoggerFinder().getClass().getName(),
+                    "loggerfinder.SimpleLoggerFinder");
             Logger testLogger = Logger.getLogger("jdk.security.event");
-            System.out.println("NAME : " + testLogger.getClass().getName());
+            assertEquals(testLogger.getClass().getName(), "java.util.logging.Logger");
         }
     }
 
@@ -193,6 +195,12 @@ public class SignedLoggerFinderTest {
             }
         }
         return ProcessTools.executeCommand(launcher.getCommand());
+    }
+
+    private static void assertEquals(String expected, String received) {
+        if (!expected.equals(received)) {
+            throw new RuntimeException("Received: " + received);
+        }
     }
 }
 
