@@ -41,6 +41,7 @@ import java.security.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.*;
+import java.util.logging.*;
 
 import jdk.test.lib.JDKToolFinder;
 import jdk.test.lib.JDKToolLauncher;
@@ -73,6 +74,7 @@ public class SignedLoggerFinderTest {
     private static final String ALIAS = "JavaTest";
     private static final String STOREPASS = "changeit";
     private static final String KEYPASS = "changeit";
+    private static final String DNAME = "CN=sample";
     private static final Path jarPath1 =
         Path.of(System.getProperty("test.classes", "."), "SimpleLoggerFinder.jar");
     private static final Path jarPath2 =
@@ -104,6 +106,12 @@ public class SignedLoggerFinderTest {
                                 .filter(t -> !t.isEmpty())
                                 .toArray(String[]::new))
                         .shouldHaveExitValue(0);
+                if (signJars) {
+                    outputAnalyzer
+                            .shouldContain("TEST LOGGER:")
+                            .shouldContain(DNAME);
+                }
+
             } catch (Throwable t) {
                 throw new RuntimeException("Unexpected fail.", t);
             }
@@ -114,6 +122,9 @@ public class SignedLoggerFinderTest {
             JarFile jf2 = new JarFile(jarPath2.toString(), true);
             jf2.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
             Security.setProperty("test", "test");
+
+            Logger testLogger = Logger.getLogger("jdk.security.event");
+            System.out.println("NAME : " + testLogger.getClass().getName());
         }
     }
 
@@ -148,7 +159,7 @@ public class SignedLoggerFinderTest {
                 "-alias", ALIAS,
                 "-keystore", KEYSTORE,
                 "-keypass", KEYPASS,
-                "-dname", "cn=sample",
+                "-dname", DNAME,
                 "-storepass", STOREPASS
         ).shouldHaveExitValue(0);
     }

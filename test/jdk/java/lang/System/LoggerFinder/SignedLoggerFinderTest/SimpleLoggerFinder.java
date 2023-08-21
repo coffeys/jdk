@@ -33,7 +33,8 @@ public class SimpleLoggerFinder extends System.LoggerFinder {
 
         @Override
         public void log(Level level, ResourceBundle bundle, String format, Object... params) {
-            System.out.println("TEST LOGGER: " + format);
+            System.out.println("TEST LOGGER: " + Arrays.asList(params));
+
         }
     }
 }
