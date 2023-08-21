@@ -24,15 +24,17 @@ public class SimpleLoggerFinder extends System.LoggerFinder {
 
         @Override
         public boolean isLoggable(Level level) {
-            return false;
+            return true;
         }
 
         @Override
         public void log(Level level, ResourceBundle bundle, String msg, Throwable thrown) {
+            System.out.println("TEST LOGGER: " + msg);
         }
 
         @Override
         public void log(Level level, ResourceBundle bundle, String format, Object... params) {
+            System.out.println("TEST LOGGER: " + format);
         }
     }
 }

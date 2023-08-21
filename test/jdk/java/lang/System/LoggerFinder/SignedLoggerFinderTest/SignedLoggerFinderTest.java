@@ -37,6 +37,7 @@
 
 import java.io.File;
 import java.nio.file.*;
+import java.security.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.*;
@@ -86,30 +87,33 @@ public class SignedLoggerFinderTest {
             cmds.add(JDKToolFinder.getJDKTool("java"));
             cmds.addAll(asList(Utils.getTestJavaOpts()));
             cmds.addAll(List.of(
-                    "-classpath",
-                    System.getProperty("test.classes") + File.pathSeparator +
-                        jarPath1.toString() + File.pathSeparator + jarPath2.toString(),
-                    "-Dtest.classes=" + System.getProperty("test.classes"),
-                    // following debug property seems useful to tickle the issue
-                    "-Dsun.misc.URLClassPath.debug=true",
-                    "SignedLoggerFinderTest",
-                    "no-init"));
-
+                "-classpath",
+                System.getProperty("test.classes") + File.pathSeparator +
+                    jarPath1.toString() + File.pathSeparator + jarPath2.toString(),
+                "-Dtest.classes=" + System.getProperty("test.classes"),
+                // following debug property seems useful to tickle the issue
+                "-Dsun.misc.URLClassPath.debug=true",
+                // enable logging to verify correct output
+                "-Djava.util.logging.config.file=" +
+                    Path.of(System.getProperty("test.src", "."), "logging.properties"),
+                "SignedLoggerFinderTest",
+                "no-init"));
 
             try {
                 OutputAnalyzer outputAnalyzer = ProcessTools.executeCommand(cmds.stream()
                                 .filter(t -> !t.isEmpty())
                                 .toArray(String[]::new))
                         .shouldHaveExitValue(0);
-                System.out.println("Output:" + outputAnalyzer.getOutput());
             } catch (Throwable t) {
                 throw new RuntimeException("Unexpected fail.", t);
             }
         } else {
             // set up complete. Run the code to trigger the recursion
-            JarFile jf = new JarFile(System.getProperty("test.classes") +
-                    File.separator + "SimpleLoggerFinder.jar", true);
+            JarFile jf = new JarFile(jarPath1.toString(), true);
             jf.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
+            JarFile jf2 = new JarFile(jarPath2.toString(), true);
+            jf2.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
+            Security.setProperty("test", "test");
         }
     }
 
