@@ -30,7 +30,6 @@ import java.security.Permission;
 import java.security.PrivilegedAction;
 import java.util.Iterator;
 import java.util.Locale;
-import java.util.ResourceBundle;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import sun.security.util.SecurityConstants;
@@ -44,7 +43,7 @@ public final class LoggerFinderLoader {
 
     private static volatile System.LoggerFinder service;
     private static final Object lock = new int[0];
-    private static boolean loading;
+    private static volatile boolean loading;
     private static System.LoggerFinder noOpLoggerFinder;
     static final Permission CLASSLOADER_PERMISSION =
             SecurityConstants.GET_CLASSLOADER_PERMISSION;
@@ -69,24 +68,14 @@ public final class LoggerFinderLoader {
         throw new InternalError("LoggerFinderLoader cannot be instantiated");
     }
 
-
     // Return the loaded LoggerFinder, or load it if not already loaded.
     private static System.LoggerFinder service() {
-        var result = service;
-        if (result != null) return result;
-
+        if (service != null) return service;
         synchronized(lock) {
-            result = service;
-            if (result != null) return result;
-            if (loading) {
-                // thread already loading LoggerFinder. Return a simple no-op
-                // LoggerFinder instance to avoid recursion caused by jar
-                // loading code which may trigger other Logger calls.
-                return getNoOpLoggerFinderInstance();
-            }
-            loading = true;
+            if (service != null) return service;
             try {
-                result = service = loadLoggerFinder();
+                loading = true;
+                service = loadLoggerFinder();
             } finally {
                 loading = false;
             }
@@ -94,7 +83,11 @@ public final class LoggerFinderLoader {
         // Since the LoggerFinder is already loaded - we can stop using
         // temporary loggers.
         BootstrapLogger.redirectTemporaryLoggers();
-        return result;
+        return service;
+    }
+
+    static boolean isLoading() {
+        return loading;
     }
 
     // Get configuration error policy
@@ -237,37 +230,12 @@ public final class LoggerFinderLoader {
 
     private static class NoOpLoggerFinder extends System.LoggerFinder {
 
-        static final NoOpLogger NOOP_LOGGER = new NoOpLogger("NoOpLogger");
+        static final System.Logger NOOP_LOGGER = LazyLoggers.getLazyLogger(
+                "bootstrapLogger", LoggerFinderLoader.class.getModule());
 
         @Override
         public System.Logger getLogger(String name, Module module) {
             return NOOP_LOGGER;
-        }
-    }
-
-    private static class NoOpLogger implements System.Logger {
-        private final String name;
-
-        public NoOpLogger(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public String getName() {
-            return name;
-        }
-
-        @Override
-        public boolean isLoggable(Level level) {
-            return false;
-        }
-
-        @Override
-        public void log(Level level, ResourceBundle bundle, String msg, Throwable thrown) {
-        }
-
-        @Override
-        public void log(Level level, ResourceBundle bundle, String format, Object... params) {
         }
     }
 }

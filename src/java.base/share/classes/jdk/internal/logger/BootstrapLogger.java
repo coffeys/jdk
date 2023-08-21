@@ -933,11 +933,13 @@ public final class BootstrapLogger implements Logger, PlatformLogger.Bridge,
     // We will use lazy loggers if:
     //    - the VM is not yet booted
     //    - the logging backend is a custom backend
+    //    - LoggerFinder service is loading
     //    - the logging backend is JUL, there is no custom config,
     //      and the LogManager has not been initialized yet.
     public static synchronized boolean useLazyLoggers() {
         return !BootstrapLogger.isBooted()
                 || DetectBackend.detectedBackend == LoggingBackend.CUSTOM
+                || LoggerFinderLoader.isLoading()
                 || useSurrogateLoggers();
     }
 

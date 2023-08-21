@@ -145,7 +145,7 @@ public final class EventHelper {
         // trigger early loading of System Logger but where
         // the verification process still has JarFiles locked
         if (securityLogger == null && !JUJA.isInitializing()) {
-            LOGGER_HANDLE.compareAndSet( null, System.getLogger(SECURITY_LOGGER_NAME));
+            LOGGER_HANDLE.compareAndSet(null, System.getLogger(SECURITY_LOGGER_NAME));
             loggingSecurity = securityLogger.isLoggable(LOG_LEVEL);
         }
         return loggingSecurity;

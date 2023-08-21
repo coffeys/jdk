@@ -124,11 +124,12 @@ public class SignedLoggerFinderTest {
 
         Path classes = Paths.get(System.getProperty("test.classes", ""));
         JarUtils.createJarFile(jarPath1,
-                classes,
-                classes.resolve("loggerfinder/SimpleLoggerFinder.class"),
-                classes.resolve("loggerfinder/SimpleLoggerFinder$NoOpLogger.class"));
+            classes,
+            classes.resolve("loggerfinder/SimpleLoggerFinder.class"),
+            classes.resolve("loggerfinder/SimpleLoggerFinder$NoOpLogger.class"));
+
         JarUtils.updateJarFile(jarPath1, Path.of(System.getProperty("test.src")),
-                Path.of("META-INF", "services", "java.lang.System$LoggerFinder"));
+            Path.of("META-INF", "services", "java.lang.System$LoggerFinder"));
         if (signJars) {
             signJar(jarPath1.toString());
         }
@@ -182,6 +183,5 @@ public class SignedLoggerFinderTest {
         }
         return ProcessTools.executeCommand(launcher.getCommand());
     }
-
 }
 

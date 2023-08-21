@@ -2,7 +2,6 @@ package loggerfinder;
 
 import java.lang.*;
 import java.util.*;
-import java.util.logging.*;
 
 public class SimpleLoggerFinder extends System.LoggerFinder {
      @Override
