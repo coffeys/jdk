@@ -40,11 +40,9 @@ import sun.security.action.GetPropertyAction;
  * Helper class used to load the {@link java.lang.System.LoggerFinder}.
  */
 public final class LoggerFinderLoader {
-
     private static volatile System.LoggerFinder service;
     private static final Object lock = new int[0];
     private static volatile boolean loading;
-    private static System.LoggerFinder noOpLoggerFinder;
     static final Permission CLASSLOADER_PERMISSION =
             SecurityConstants.GET_CLASSLOADER_PERMISSION;
     static final Permission READ_PERMISSION =
