@@ -220,22 +220,4 @@ public final class LoggerFinderLoader {
         }
         return service();
     }
-
-    private static System.LoggerFinder getNoOpLoggerFinderInstance() {
-        if (noOpLoggerFinder == null) {
-            noOpLoggerFinder = new NoOpLoggerFinder();
-        }
-        return noOpLoggerFinder;
-    }
-
-    private static class NoOpLoggerFinder extends System.LoggerFinder {
-
-        static final System.Logger NOOP_LOGGER = LazyLoggers.getLazyLogger(
-                "bootstrapLogger", LoggerFinderLoader.class.getModule());
-
-        @Override
-        public System.Logger getLogger(String name, Module module) {
-            return NOOP_LOGGER;
-        }
-    }
 }
