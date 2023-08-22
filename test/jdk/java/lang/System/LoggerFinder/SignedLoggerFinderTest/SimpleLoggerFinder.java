@@ -4,6 +4,17 @@ import java.lang.*;
 import java.util.*;
 
 public class SimpleLoggerFinder extends System.LoggerFinder {
+
+    static {
+        try {
+            long sleep = new Random().nextLong(1000L) + 1L;
+            System.out.println("Logger finder service load sleep value: " + sleep);
+            // simulate a slow load service
+            Thread.sleep(sleep);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+    }
      @Override
      public System.Logger getLogger(String name, Module module) {
          return new NoOpLogger(name);

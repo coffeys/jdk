@@ -33,13 +33,13 @@
  * @compile SignedLoggerFinderTest.java SimpleLoggerFinder.java
  * @run main SignedLoggerFinderTest init
  * @run main SignedLoggerFinderTest init sign
+ * @run main SignedLoggerFinderTest init sign multi
  */
 
 import java.io.File;
 import java.nio.file.*;
 import java.security.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.jar.*;
 import java.util.logging.*;
 
@@ -68,7 +68,8 @@ public class SignedLoggerFinderTest {
 
     private static boolean init = false;
     private static boolean signJars = false;
-
+    private static boolean mutliThreadLoad = false;
+    private static volatile boolean testComplete = false;
 
     private static final String KEYSTORE = "keystore.jks";
     private static final String ALIAS = "JavaTest";
@@ -83,6 +84,9 @@ public class SignedLoggerFinderTest {
     public static void main(String[] args) throws Throwable {
         init = args.length >=1 && args[0].equals("init");
         signJars = args.length >=2 && args[1].equals("sign");
+        mutliThreadLoad = args.length >=3 && args[2].equals("multi");
+
+
         if (init) {
             initialize();
             List<String> cmds = new ArrayList<>();
@@ -95,11 +99,16 @@ public class SignedLoggerFinderTest {
                 "-Dtest.classes=" + System.getProperty("test.classes"),
                 // following debug property seems useful to tickle the issue
                 "-Dsun.misc.URLClassPath.debug=true",
+                // useful for debug purposes
+                "-Djdk.logger.finder.error=DEBUG",
                 // enable logging to verify correct output
                 "-Djava.util.logging.config.file=" +
                     Path.of(System.getProperty("test.src", "."), "logging.properties"),
                 "SignedLoggerFinderTest",
                 "no-init"));
+            if (mutliThreadLoad) {
+                cmds.add("multi");
+            }
 
             try {
                 OutputAnalyzer outputAnalyzer = ProcessTools.executeCommand(cmds.stream()
@@ -117,16 +126,35 @@ public class SignedLoggerFinderTest {
             }
         } else {
             // set up complete. Run the code to trigger the recursion
+            mutliThreadLoad = args.length >=2 && args[1].equals("multi");
+            if (mutliThreadLoad) {
+                long sleep = new Random().nextLong(100L) + 1L;
+                System.out.println("multi thread load sleep value: " + sleep);
+                Runnable t = () -> {
+                    while(!testComplete) {
+                        // random logger call to exercise System.getLogger
+                        System.getLogger("random" + System.currentTimeMillis());
+                        try {
+                            Thread.sleep(sleep);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                };
+                new Thread(t).start();
+            }
             JarFile jf = new JarFile(jarPath1.toString(), true);
             jf.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
             JarFile jf2 = new JarFile(jarPath2.toString(), true);
             jf2.getInputStream(jf.getJarEntry("loggerfinder/SimpleLoggerFinder.class"));
             Security.setProperty("test", "test");
 
+            // some extra sanity checks
             assertEquals(System.LoggerFinder.getLoggerFinder().getClass().getName(),
                     "loggerfinder.SimpleLoggerFinder");
             Logger testLogger = Logger.getLogger("jdk.security.event");
             assertEquals(testLogger.getClass().getName(), "java.util.logging.Logger");
+            testComplete = true;
         }
     }
 
@@ -197,7 +225,7 @@ public class SignedLoggerFinderTest {
         return ProcessTools.executeCommand(launcher.getCommand());
     }
 
-    private static void assertEquals(String expected, String received) {
+    private static void assertEquals(String received, String expected) {
         if (!expected.equals(received)) {
             throw new RuntimeException("Received: " + received);
         }
