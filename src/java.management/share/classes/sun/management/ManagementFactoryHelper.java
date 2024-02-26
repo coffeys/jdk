@@ -327,6 +327,17 @@ public class ManagementFactoryHelper {
 
         @Override
         public void setLoggerLevel(String loggerName, String levelName) {
+            // re-read the logging config first
+            try {
+                final Method m = LoggingMXBeanAccess.LOG_MANAGER_CLASS.getMethod("getLogManager");
+                Object logManagerInstance = m.invoke(null);
+                Method readConfigurationMethod = LoggingMXBeanAccess.LOG_MANAGER_CLASS.getDeclaredMethod("readConfiguration");
+                readConfigurationMethod.invoke(logManagerInstance);
+            } catch (NoSuchMethodException
+                     | IllegalAccessException
+                     | InvocationTargetException x) {
+                throw new ExceptionInInitializerError(x);
+            }
             loggingAccess.invoke("setLoggerLevel", loggerName, levelName);
         }
 

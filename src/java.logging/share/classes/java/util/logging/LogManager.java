@@ -164,6 +164,10 @@ public class LogManager {
     private volatile Properties props = new Properties();
     private static final Level defaultLevel = Level.INFO;
 
+    // List of known loggers used by the JDK internal libraries
+    private static final List<String> dormantLoggerNames = List.of(
+            "javax.net.ssl");
+
     // LoggerContext for system loggers and user loggers
     private final LoggerContext systemContext = new SystemLoggerContext();
     private final LoggerContext userContext = new LoggerContext();
@@ -1583,6 +1587,7 @@ public class LogManager {
                 try {
                     // Load the properties
                     props.load(ins);
+                    addDormantLoggersProp(props);
                 } catch (IllegalArgumentException x) {
                     // props.load may throw an IllegalArgumentException if the stream
                     // contains malformed Unicode escape sequences.
@@ -1630,6 +1635,14 @@ public class LogManager {
         // should be called out of lock to avoid dead-lock situations
         // when user code is involved
         invokeConfigurationListeners();
+    }
+
+    // set the dormant Loggers to level of 'OFF' unless an
+    // existing level property already exists for this Logger
+    private void addDormantLoggersProp(Properties props) {
+        for (String s : dormantLoggerNames) {
+            props.putIfAbsent(s + ".level", "OFF");
+        }
     }
 
     // This enum enumerate the configuration properties that will be

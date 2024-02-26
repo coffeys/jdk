@@ -466,4 +466,18 @@ public final class LazyLoggers {
         }
     }
 
+    // a dormant logger which can be activated remotely,
+    // via PlatformLoggingMXBean.setLoggerLevel
+    public static final Logger getDormantLogger(String name, Module module) {
+        // Similar to getLazyLogger but we set level to OFF in the scenario
+        // where the LogManager framework hasn't been initialized yet. If the JUL
+        // framework is used, we'll add level config data for dormant loggers during
+        // configuration processing of properties file.
+        var l = getLazyLogger(name, module);
+        if (l instanceof JdkLazyLogger lazy &&
+            lazy.loggerAccessor.wrapped() instanceof SimpleConsoleLogger simple) {
+                simple.level = PlatformLogger.Level.OFF;
+        }
+        return l;
+    }
 }
