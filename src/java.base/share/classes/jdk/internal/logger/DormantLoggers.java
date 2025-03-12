@@ -6,11 +6,20 @@ import sun.security.ssl.SSLLogger;
 import sun.util.logging.PlatformLogger;
 
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DormantLoggers {
+
+    // control the list of Loggers allowed
+    private static final List<String> DORMANT_LOGGER_NAMES =  new ArrayList<>();
+
+    static {
+        DORMANT_LOGGER_NAMES.add("javax.net.ssl");
+    }
 
     static class LoggerInfo {
         public final WeakReference<System.Logger> logger;
@@ -31,12 +40,15 @@ public class DormantLoggers {
      * {@link #getLazyLogger(String, Module)}, but attempts to set the
      * initial log level to {@link PlatformLogger.Level#OFF}.
      *
-     * @param name the name of the logger
+     * @param loggerName the loggerName of the logger
      * @param module the module on behalf of which the logger is created
      * @return a dormant logger that can be managed remotely
      */
-    public static System.Logger getDormantLogger(String name, Module module) {
-        return dormantLoggers.computeIfAbsent(name, k -> {
+    public static System.Logger getDormantLogger(String loggerName, Module module) {
+        if (!validLogger(loggerName)) {
+            throw new RuntimeException("Unexpected logger loggerName");
+        }
+        return dormantLoggers.computeIfAbsent(loggerName, k -> {
             var newLogger = LazyLoggers.getLazyLogger(k, module);
             PlatformLogger.Level level = PlatformLogger.Level.OFF;
             if (newLogger instanceof LazyLoggers.JdkLazyLogger lazy &&
@@ -51,11 +63,12 @@ public class DormantLoggers {
     /**
      * Returns a cached dormant logger if it exists in the cache.
      *
-     * @param logger the name of the logger
-     * @return the cached dormant logger, or null if not found
+     * @param loggerName the name of the loggerName
+     * @return the cached dormant loggerName, or null if not found
      */
-    public static System.Logger getCachedDormantLogger(String logger) {
-        return dormantLoggers.get(logger).logger.get();
+    public static System.Logger getCachedDormantLogger(String loggerName) {
+        var loggerInfo = dormantLoggers.get(loggerName);
+        return loggerInfo != null ? loggerInfo.logger.get() : null;
     }
 
     /**
@@ -68,14 +81,14 @@ public class DormantLoggers {
      * After updating the logging level, this method notifies any interested parties
      * about the level change using the {@link #notifyLevelChange(String)} method.
      *
-     * @param logger the name of the logger whose level should be changed
+     * @param loggerName the name of the loggerName whose level should be changed
      * @param level the new logging level as a string representation of
      *             {@link PlatformLogger.Level}
      */
-    public static void setDormantLoggerLevel(String logger, String level) {
-        var l = getCachedDormantLogger(logger);
+    public static void setDormantLoggerLevel(String loggerName, String level) {
+        var l = getCachedDormantLogger(loggerName);
         if (l == null) {
-            dormantLoggers.remove(logger);
+            dormantLoggers.remove(loggerName);
             return;
         }
         if (l instanceof LazyLoggers.JdkLazyLogger lazy &&
@@ -84,17 +97,17 @@ public class DormantLoggers {
             // keep copy of Logger Levels since the JUL framework resets System.Loggers
             // to Level INFO when initialized. This value is only used for environment
             // where JavaUtilLoggingAccess is null (JUL framework not loaded)
-            dormantLoggers.replace(logger, new LoggerInfo(l, newLevel));
+            dormantLoggers.replace(loggerName, new LoggerInfo(l, newLevel));
             lc.setPlatformLevel(newLevel);
         } else {
             JavaUtilLoggingAccess jla = SharedSecrets.getJavaUtilLoggingAccess();
             if (jla != null) {
                 // j.u.logging impl has been triggered
-                jla.setLevel(logger, level);
+                jla.setLevel(loggerName, level);
             }
 
         }
-        notifyLevelChange(logger);
+        notifyLevelChange(loggerName);
     }
 
     /**
@@ -124,8 +137,11 @@ public class DormantLoggers {
         }
     }
 
+    public static boolean validLogger(String loggerName) {
+        return DORMANT_LOGGER_NAMES.contains(loggerName);
+    }
+
     public static void reloadLevels() {
-        System.err.println("RELOADING LEVELS");
         JavaUtilLoggingAccess jla = SharedSecrets.getJavaUtilLoggingAccess();
         assert(jla != null);
         Iterator<Map.Entry<String, LoggerInfo >> iter = dormantLoggers.entrySet().iterator();

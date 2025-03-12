@@ -22,13 +22,14 @@
  */
 
 /**
- * //test
+ * @test
  * @bug 8888888
  * @library /test/lib /javax/net/ssl/templates ../../
- * @summary dynamic logger
+ * @summary Exercise the System.logging_level jcmd functionality
  * @run junit DynamicLogger
  */
 
+import jdk.test.lib.JDKToolFinder;
 import jdk.test.lib.process.ProcessTools;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -36,8 +37,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.PlatformLoggingMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,7 +50,7 @@ public class DynamicLogger extends SSLSocketTemplate {
 
     static Path LOG_FILE;
     static boolean verboseLogging;
-    static final String LOG_SPLITTER_STRING = "MXBean setLevel call";
+    static final String LOG_SPLITTER_STRING = "jcmd setLevel call";
 
     @BeforeAll
     static void setup() throws Exception {
@@ -101,7 +100,7 @@ public class DynamicLogger extends SSLSocketTemplate {
                                 "FINE: Produced ServerHello handshake message \\(")),
                 // dormant Logger should be in use
                 // test with PlatformLoggingMXBean
-                Arguments.of(List.of("-Dtest.MXBean"),
+                Arguments.of(List.of("-Dtest.jcmd"),
                         List.of("FINE: adding as trusted certificates",
                                 "Produced ClientHello handshake message",
                                 "sun.security.ssl.SSLLogger log",
@@ -119,12 +118,13 @@ public class DynamicLogger extends SSLSocketTemplate {
                                  List<String> notExpected) throws Exception {
 
         List<String> args = new ArrayList<>(params);
+        args.add("-Dtest.jdk=" + System.getProperty("java.home"));
         args.add("DynamicLogger");
         OutputAnalyzer outputAnalyzer = ProcessTools.executeTestJava(args);
         outputAnalyzer.shouldHaveExitValue(0);
-        if (args.contains("-Dtest.MXBean")) {
-            // special case using MXBean to control logging
-            checkMXBeanControl(outputAnalyzer, expected, notExpected);
+        if (args.contains("-Dtest.jcmd")) {
+            // special case using jcmd to control logging
+            checkJcmdControl(outputAnalyzer, expected, notExpected);
             return;
         }
         if (expected != null) {
@@ -141,8 +141,8 @@ public class DynamicLogger extends SSLSocketTemplate {
         }
     }
 
-    private void checkMXBeanControl(OutputAnalyzer outputAnalyzer,
-                        List<String> expected, List<String> notExpected) {
+    private void checkJcmdControl(OutputAnalyzer outputAnalyzer,
+                                  List<String> expected, List<String> notExpected) {
         String[] parts = outputAnalyzer.getOutput().split(LOG_SPLITTER_STRING, 2);
         if (parts.length != 2) {
             throw new RuntimeException("unexpected");
@@ -150,7 +150,7 @@ public class DynamicLogger extends SSLSocketTemplate {
         for (String s : expected) {
             Pattern p = Pattern.compile(s);
             // parts[0]: output with logging = INFO (default)
-            // parts[1]: output with logging = ALL (set via MXBean)
+            // parts[1]: output with logging = ALL (set via jcmd)
             if (p.matcher(parts[0]).find()) {
                 throw new RuntimeException("unexpected pattern found:" + s);
             }
@@ -165,8 +165,17 @@ public class DynamicLogger extends SSLSocketTemplate {
         if (verboseLogging) {
             // this string used to split output file for checking later
             System.err.println(LOG_SPLITTER_STRING);
-            PlatformLoggingMXBean mxbean = ManagementFactory.getPlatformMXBean(PlatformLoggingMXBean.class);
-            mxbean.setLoggerLevel("javax.net.ssl", "ALL");
+            //PlatformLoggingMXBean mxbean = ManagementFactory.getPlatformMXBean(PlatformLoggingMXBean.class);
+            //mxbean.setLoggerLevel("javax.net.ssl", "ALL");
+            ProcessBuilder pb = new ProcessBuilder();
+            OutputAnalyzer output;
+            // Grab my own PID
+            String pid = Long.toString(ProcessTools.getProcessId());
+
+            pb.command(new String[] { JDKToolFinder.getJDKTool("jcmd"), pid,
+                    "System.logging_level logger=javax.net.ssl", "level=ALL"});
+            output = new OutputAnalyzer(pb.start());
+            output.shouldContain("Command executed successfully").shouldHaveExitValue(0);
         }
         super.doClientSide();
 
@@ -174,7 +183,7 @@ public class DynamicLogger extends SSLSocketTemplate {
 
     public static void main(String[] args) throws Exception {
         new DynamicLogger().run();
-        if (System.getProperty("test.MXBean") != null) {
+        if (System.getProperty("test.jcmd") != null) {
             // scenario where Logging Level is modified dynamically
             // during test run (and re-tested)
             verboseLogging = true;

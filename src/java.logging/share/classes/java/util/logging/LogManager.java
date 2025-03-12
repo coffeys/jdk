@@ -188,7 +188,6 @@ public class LogManager {
     private volatile int globalHandlersState; // = STATE_INITIALIZED;
     // A concurrency lock for reset(), readConfiguration() and Cleaner.
     private final ReentrantLock configurationLock = new ReentrantLock();
-    private static final JavaUtilLoggingAccess jla = setupAccess();
 
     // This list contains the loggers for which some handlers have been
     // explicitly configured in the configuration file.
@@ -248,7 +247,7 @@ public class LogManager {
         if (mgr == null) {
             mgr = new LogManager();
         }
-        SharedSecrets.setJavaUtilLoggingAccess(jla);
+        SharedSecrets.setJavaUtilLoggingAccess(setupAccess());
         return mgr;
     }
 
@@ -256,7 +255,8 @@ public class LogManager {
         return new JavaUtilLoggingAccess() {
             @Override
             public void setLevel(String loggerName, String levelName) {
-                if (!DORMANT_LOGGER_NAMES.contains(loggerName)) {
+                if (DormantLoggers.getCachedDormantLogger(loggerName) == null) {
+                    // logger doesn't exist
                     return;
                 }
 
@@ -267,6 +267,11 @@ public class LogManager {
             }
             @Override
             public PlatformLogger.Level getLevel(String loggerName) {
+                if (DormantLoggers.getCachedDormantLogger(loggerName) == null) {
+                    // logger doesn't exist
+                    // return default level of dormant logger
+                    return PlatformLogger.Level.OFF;
+                }
                 Level level = Logger.getLogger(loggerName).getLevel();
                 if (level == null) {
                     // default level of dormant logger
@@ -284,12 +289,6 @@ public class LogManager {
         handler.setLevel(level);
         logger.addHandler(handler);
         logger.setLevel(level);
-    }
-
-    static final List<String> DORMANT_LOGGER_NAMES =  new ArrayList<>();
-
-    static {
-        DORMANT_LOGGER_NAMES.add("javax.net.ssl");
     }
 
     // This private class is used as a shutdown hook.
