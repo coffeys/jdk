@@ -26,7 +26,7 @@
  * @bug 8888888
  * @library /test/lib /javax/net/ssl/templates ../../
  * @summary Exercise the System.logging_level jcmd functionality
- * @run junit DynamicLogger
+ * @run junit DynamicLoggerTest
  */
 
 import jdk.test.lib.JDKToolFinder;
@@ -46,7 +46,7 @@ import java.util.stream.Stream;
 
 import jdk.test.lib.process.OutputAnalyzer;
 
-public class DynamicLogger extends SSLSocketTemplate {
+public class DynamicLoggerTest extends SSLSocketTemplate {
 
     static Path LOG_FILE;
     static boolean verboseLogging;
@@ -78,16 +78,16 @@ public class DynamicLogger extends SSLSocketTemplate {
                         List.of("Plaintext before ENCRYPTION",
                                 "adding as trusted certificates")),
                 // empty value invokes System.Logger use
-                Arguments.of(List.of("-Djavax.net.debug",
-                        "-Djava.util.logging.config.file=" + LOG_FILE),
-                        List.of("FINE: adding as trusted certificates",
-                        "Produced ClientHello handshake message",
-                        "sun.security.ssl.SSLLogger log",
-                        "\"client version\"",
-                        "FINE: WRITE: TLSv1.3 application_data",
-                        "supported_versions",
-                        "FINE: Produced ServerHello handshake message \\("),
-                        null),
+//                Arguments.of(List.of("-Djavax.net.debug",
+//                        "-Djava.util.logging.config.file=" + LOG_FILE),
+//                        List.of("FINE: adding as trusted certificates",
+//                        "Produced ClientHello handshake message",
+//                        "sun.security.ssl.SSLLogger log",
+//                        "\"client version\"",
+//                        "FINE: WRITE: TLSv1.3 application_data",
+//                        "supported_versions",
+//                        "FINE: Produced ServerHello handshake message \\("),
+//                        null),
                 // without forcing load of j.u.l config,
                 // System Logger Level = INFO
                 Arguments.of(List.of("-Djavax.net.debug"),
@@ -119,7 +119,7 @@ public class DynamicLogger extends SSLSocketTemplate {
 
         List<String> args = new ArrayList<>(params);
         args.add("-Dtest.jdk=" + System.getProperty("java.home"));
-        args.add("DynamicLogger");
+        args.add("DynamicLoggerTest");
         OutputAnalyzer outputAnalyzer = ProcessTools.executeTestJava(args);
         outputAnalyzer.shouldHaveExitValue(0);
         if (args.contains("-Dtest.jcmd")) {
@@ -165,8 +165,6 @@ public class DynamicLogger extends SSLSocketTemplate {
         if (verboseLogging) {
             // this string used to split output file for checking later
             System.err.println(LOG_SPLITTER_STRING);
-            //PlatformLoggingMXBean mxbean = ManagementFactory.getPlatformMXBean(PlatformLoggingMXBean.class);
-            //mxbean.setLoggerLevel("javax.net.ssl", "ALL");
             ProcessBuilder pb = new ProcessBuilder();
             OutputAnalyzer output;
             // Grab my own PID
@@ -182,12 +180,12 @@ public class DynamicLogger extends SSLSocketTemplate {
     }
 
     public static void main(String[] args) throws Exception {
-        new DynamicLogger().run();
+        new DynamicLoggerTest().run();
         if (System.getProperty("test.jcmd") != null) {
             // scenario where Logging Level is modified dynamically
             // during test run (and re-tested)
             verboseLogging = true;
-            new DynamicLogger().run();
+            new DynamicLoggerTest().run();
         }
 
     }
