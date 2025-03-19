@@ -54,7 +54,7 @@ public class DynamicLogger extends SSLSocketTemplate {
 
     @BeforeAll
     static void setup() throws Exception {
-        LOG_FILE = Path.of(System.getProperty("test.classes"), "logging.conf");
+        LOG_FILE = Path.of("logging.conf");
         Files.writeString(LOG_FILE, ".level = ALL\n" +
                 "handlers= java.util.logging.ConsoleHandler\n" +
                 "java.util.logging.ConsoleHandler.level = ALL\n");
