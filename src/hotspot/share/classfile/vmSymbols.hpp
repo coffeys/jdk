@@ -713,7 +713,6 @@ class SerializeClosure;
   template(classRedefinedCount_name,                   "classRedefinedCount")                                     \
   template(classLoader_name,                           "classLoader")                                             \
   template(componentType_name,                         "componentType")                                           \
-  template(setLogLevel_name,                           "setLogLevel")                                             \
                                                                                                                   \
   /* forEachRemaining support */                                                                                  \
   template(java_util_stream_StreamsRangeIntSpliterator,          "java/util/stream/Streams$RangeIntSpliterator")  \
