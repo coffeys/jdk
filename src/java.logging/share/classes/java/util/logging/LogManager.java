@@ -282,12 +282,19 @@ public class LogManager {
         };
     }
 
-    // TODO only need to adjust levels if logger already exists
     private static void configureLogger(Logger logger, Level level) {
-        logger.setUseParentHandlers(false);
-        ConsoleHandler handler = new ConsoleHandler();
-        handler.setLevel(level);
-        logger.addHandler(handler);
+        if (logger.getUseParentHandlers()) {
+            // 1st time we're setting up this logger
+            // configure the dormant logger to use a new ConsoleHandler
+            // configured to same level as the logger
+            logger.setUseParentHandlers(false);
+            ConsoleHandler handler = new ConsoleHandler();
+            handler.setLevel(level);
+            logger.addHandler(handler);
+        } else {
+            // adjust the ConsoleHandler Level to match same as Logger
+            Arrays.stream(logger.getHandlers()).findFirst().ifPresent(h -> h.setLevel(level));
+        }
         logger.setLevel(level);
     }
 
